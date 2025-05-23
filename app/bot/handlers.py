@@ -24,7 +24,7 @@ from app.bot.messages import (
 from app.qrcode.parser import download_image, extract_qr_code
 from app.verification.api_client import verify_user_permission
 from app.group.manager import add_user_to_group
-from utils.redis_client import (
+from utils.memory_store import (
     get_user_state, 
     set_user_state,
     reset_user_state,

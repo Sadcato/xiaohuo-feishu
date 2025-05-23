@@ -12,7 +12,7 @@ from config.config import (
     API_TOKEN,
     EVENT_ID
 )
-from utils.redis_client import cache_verification_result, get_cached_verification_result
+from utils.memory_store import cache_verification_result, get_cached_verification_result
 
 async def verify_user_permission(user_id: str, qr_data: str, group_type: str) -> Dict[str, Any]:
     """

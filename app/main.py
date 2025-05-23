@@ -1,6 +1,10 @@
 import uvicorn
+import time
+import threading
+import logging
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config.config import (
     HOST, PORT, DEBUG, 
@@ -8,7 +12,14 @@ from config.config import (
 )
 from app.bot.handlers import handle_bot_event
 from utils.authentication import verify_feishu_request
-from utils.redis_client import close_redis_client
+from utils.memory_store import close_memory_store, cleanup_expired_states
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO if DEBUG else logging.WARNING,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('xiaohuo-bot')
 
 app = FastAPI(
     title="小火机器人 API",
@@ -24,9 +35,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 后台线程：定期清理过期状态
+cleanup_thread = None
+shutdown_flag = False
+
+def cleanup_thread_func():
+    global shutdown_flag
+    while not shutdown_flag:
+        try:
+            cleanup_expired_states()
+        except Exception as e:
+            logger.error(f"状态清理出错: {e}")
+        # 每60秒清理一次
+        time.sleep(60)
+
+@app.on_event("startup")
+async def startup_event():
+    global cleanup_thread, shutdown_flag
+    # 重置关闭标志
+    shutdown_flag = False
+    # 启动清理线程
+    cleanup_thread = threading.Thread(target=cleanup_thread_func, daemon=True)
+    cleanup_thread.start()
+    logger.info("应用已启动，状态清理线程已开始运行")
+
 @app.on_event("shutdown")
 async def shutdown_event():
-    await close_redis_client()
+    global shutdown_flag
+    # 设置关闭标志
+    shutdown_flag = True
+    # 关闭内存存储
+    await close_memory_store()
+    logger.info("应用已关闭，资源已清理")
 
 @app.get("/")
 async def root():
