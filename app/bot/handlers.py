@@ -24,13 +24,18 @@ from app.bot.messages import (
 from app.qrcode.parser import download_image, extract_qr_code
 from app.verification.api_client import verify_user_permission
 from app.group.manager import add_user_to_group
-from utils.authentication import get_tenant_access_token
 from utils.redis_client import (
     get_user_state, 
     set_user_state,
     reset_user_state,
     UserState
 )
+from utils.lark_client import get_lark_client
+from utils.error_handler import log_api_error
+import logging
+
+# 配置日志
+logger = logging.getLogger('xiaohuo-bot')
 
 async def handle_bot_event(event_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -250,11 +255,13 @@ async def handle_qr_code_image(message_data: Dict[str, Any], sender_id: str, use
         
         if verification_result.get("success", False):
             # 验证成功，添加用户到群组
+            logger.info(f"用户 {sender_id} 验证成功，准备添加到{group_type}群组")
             group_result = await add_user_to_group(sender_id, group_type)
             
             if group_result.get("success", False):
                 # 添加群组成功
                 message = group_result.get("message", "")
+                logger.info(f"用户 {sender_id} 成功加入群组")
                 await send_verification_result(
                     sender_id,
                     True,
@@ -265,11 +272,31 @@ async def handle_qr_code_image(message_data: Dict[str, Any], sender_id: str, use
             else:
                 # 添加群组失败
                 error = group_result.get("error", "未知错误")
-                await send_verification_result(
-                    sender_id,
-                    False,
-                    f"验证成功，但添加群组失败: {error}"
-                )
+                
+                # 检查是否是权限错误
+                if group_result.get("is_permission_error", False):
+                    logger.error(f"检测到权限错误: {error}")
+                    
+                    # 简化错误消息给用户，便于理解
+                    user_friendly_error = "由于飞书权限限制，无法将您添加到群组。\n\n请联系管理员检查机器人权限设置。"
+                    
+                    # 对管理员发送具体错误日志，这里我们使用日志记录
+                    admin_error = f"权限错误: {error}"
+                    logger.error(admin_error)
+                    
+                    await send_verification_result(
+                        sender_id,
+                        False,
+                        user_friendly_error
+                    )
+                else:
+                    # 非权限错误
+                    await send_verification_result(
+                        sender_id,
+                        False,
+                        f"验证成功，但添加群组失败: {error}"
+                    )
+                
                 # 保持当前状态，以便用户可以重试
                 await set_user_state(sender_id, {
                     "state": UserState.WAITING_QR_CODE,

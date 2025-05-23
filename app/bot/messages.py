@@ -3,11 +3,13 @@ Message utilities for the Feishu bot.
 This module handles sending messages to users through the Feishu API.
 """
 import json
-import httpx
+import uuid
 from typing import Optional, Dict, Any
 
-from config.config import FEISHU_SEND_MESSAGE_URL
-from utils.authentication import get_tenant_access_token
+import lark_oapi as lark
+from lark_oapi.api.im.v1 import *
+
+from utils.lark_client import get_lark_client
 from app.bot.cards import (
     create_group_selection_card,
     create_qr_request_card,
@@ -32,45 +34,48 @@ async def send_message(
     Returns:
         Dict: Response from Feishu API
     """
-    # Get access token
-    token = await get_tenant_access_token()
+    client = get_lark_client()
     
-    # Prepare headers
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json; charset=utf-8"
-    }
-    
-    # Prepare message content
-    message_content = content
+    # 准备消息内容
     if message_type == "text":
-        message_content = json.dumps({"text": content})
+        content_dict = {"text": content}
+        content = json.dumps(content_dict)
     
-    # Prepare request data
-    data = {
-        "msg_type": message_type,
-        "content": message_content
-    }
+    # 确定接收ID类型
+    receive_id_type = "chat_id" if is_chat_id else "open_id"
     
-    # Set the receiver ID based on type
-    if is_chat_id:
-        data["chat_id"] = receiver_id
-    else:
-        data["open_id"] = receiver_id
+    # 构造请求对象
+    request = CreateMessageRequest.builder() \
+        .receive_id_type(receive_id_type) \
+        .request_body(CreateMessageRequestBody.builder()
+            .receive_id(receiver_id)
+            .msg_type(message_type)
+            .content(content)
+            .uuid(str(uuid.uuid4()))
+            .build()) \
+        .build()
     
-    # Send the message
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                FEISHU_SEND_MESSAGE_URL,
-                headers=headers,
-                json=data
-            )
-            response.raise_for_status()
-            return response.json()
+        # 发起请求
+        response = client.im.v1.message.create(request)
+        
+        # 处理响应
+        if response.success():
+            return {
+                "code": 0,
+                "data": response.data,
+                "msg": "success"
+            }
+        else:
+            print(f"Error sending message: code={response.code}, msg={response.msg}")
+            return {
+                "code": response.code,
+                "msg": response.msg,
+                "error": True
+            }
     except Exception as e:
-        # Log the error and continue (don't let message errors break the flow)
-        print(f"Error sending message: {str(e)}")
+        # 记录错误并继续（不让消息错误打断流程）
+        print(f"Exception sending message: {str(e)}")
         return {"error": str(e)}
 
 async def send_card_message(
@@ -89,12 +94,47 @@ async def send_card_message(
     Returns:
         Dict: Response from Feishu API
     """
-    return await send_message(
-        receiver_id,
-        json.dumps(card_content),
-        message_type="interactive",
-        is_chat_id=is_chat_id
-    )
+    client = get_lark_client()
+    
+    # 确定接收ID类型
+    receive_id_type = "chat_id" if is_chat_id else "open_id"
+    
+    # 将卡片内容转换为JSON字符串
+    card_content_str = json.dumps(card_content)
+    
+    # 构造请求对象
+    request = CreateMessageRequest.builder() \
+        .receive_id_type(receive_id_type) \
+        .request_body(CreateMessageRequestBody.builder()
+            .receive_id(receiver_id)
+            .msg_type("interactive")
+            .content(card_content_str)
+            .uuid(str(uuid.uuid4()))
+            .build()) \
+        .build()
+    
+    try:
+        # 发起请求
+        response = client.im.v1.message.create(request)
+        
+        # 处理响应
+        if response.success():
+            return {
+                "code": 0,
+                "data": response.data,
+                "msg": "success"
+            }
+        else:
+            print(f"Error sending card message: code={response.code}, msg={response.msg}")
+            return {
+                "code": response.code,
+                "msg": response.msg,
+                "error": True
+            }
+    except Exception as e:
+        # 记录错误并继续
+        print(f"Exception sending card message: {str(e)}")
+        return {"error": str(e)}
 
 async def send_group_selection_card(receiver_id: str) -> Dict[str, Any]:
     """

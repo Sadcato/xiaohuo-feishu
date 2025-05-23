@@ -33,8 +33,8 @@ GROUP_TYPES = {
         "name": "选手群",
         "description": "比赛选手交流群组",
         "chat_ids": [
-            # 在这里填写选手群的chat_id列表
-            # "oc_abcdefg123456"
+            # 测试群
+            "oc_2165872e0dcb789b64d6ab59e86d5b0e"
         ]
     },
     "judge": {
@@ -43,6 +43,13 @@ GROUP_TYPES = {
         "chat_ids": [
             # 在这里填写评委群的chat_id列表
             # "oc_hijklmn789012"
+        ]
+    },
+    "test": {
+        "name": "测试群",
+        "description": "测试用群组",
+        "chat_ids": [
+            "oc_2165872e0dcb789b64d6ab59e86d5b0e"
         ]
     }
 }

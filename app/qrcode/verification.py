@@ -1,14 +1,12 @@
-import io
 import httpx
-from typing import Dict, Any, Optional
-from PIL import Image
+from typing import Dict, Any
 
 from config.config import (
     QR_CODE_VERIFICATION_ENABLED,
     QR_CODE_VERIFICATION_DUMMY_MODE,
     QR_CODE_API_URL
 )
-from utils.authentication import get_tenant_access_token
+from app.qrcode.parser import download_image, extract_qr_code
 
 async def verify_qr_code(image_key: str, user_id: str) -> Dict[str, Any]:
 
@@ -102,44 +100,4 @@ async def api_verify_qr_code(image_key: str, user_id: str) -> Dict[str, Any]:
             "error": f"验证过程出错: {str(e)}"
         }
 
-async def download_image(image_key: str) -> Optional[bytes]:
-
-    token = await get_tenant_access_token()
-    
-    try:
-        # Feishu API to get image
-        image_url = f"https://open.feishu.cn/open-apis/im/v1/images/{image_key}"
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                image_url,
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            response.raise_for_status()
-            return response.content
-    
-    except Exception as e:
-        print(f"Error downloading image: {str(e)}")
-        return None
-
-async def detect_qr_code(image_data: bytes) -> Optional[str]:
-    try:
-        from pyzbar.pyzbar import decode
-        
-        image = Image.open(io.BytesIO(image_data))
-        
-        decoded_objects = decode(image)
-        
-        if decoded_objects:
-            return decoded_objects[0].data.decode('utf-8')
-        
-        return None
-    
-    except ImportError:
-        try:
-            Image.open(io.BytesIO(image_data))
-            return "agreement:valid"
-        except Exception:
-            return None
-    except Exception:
-        return None
+# 删除冗余代码，使用app.qrcode.parser中的函数

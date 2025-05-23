@@ -4,10 +4,12 @@ This module handles extracting QR code content from images.
 """
 import io
 from typing import Optional
-import httpx
 from PIL import Image
 
-from utils.authentication import get_tenant_access_token
+import lark_oapi as lark
+from lark_oapi.api.im.v1 import *
+
+from utils.lark_client import get_lark_client
 
 async def download_image(image_key: str) -> Optional[bytes]:
     """
@@ -19,22 +21,27 @@ async def download_image(image_key: str) -> Optional[bytes]:
     Returns:
         Optional[bytes]: 图片二进制数据，失败返回None
     """
-    token = await get_tenant_access_token()
+    client = get_lark_client()
     
     try:
-        # 飞书API获取图片
-        image_url = f"https://open.feishu.cn/open-apis/im/v1/images/{image_key}"
+        # 构造请求对象
+        request = GetImageRequest.builder() \
+            .image_key(image_key) \
+            .build()
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                image_url,
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            response.raise_for_status()
-            return response.content
+        # 发起请求
+        response = client.im.v1.image.get(request)
+        
+        # 处理响应
+        if response.success():
+            # 将文件对象读取为二进制数据
+            return response.file.read()
+        else:
+            print(f"Error downloading image: code={response.code}, msg={response.msg}")
+            return None
     
     except Exception as e:
-        print(f"Error downloading image: {str(e)}")
+        print(f"Exception downloading image: {str(e)}")
         return None
 
 async def extract_qr_code(image_data: bytes) -> Optional[str]:

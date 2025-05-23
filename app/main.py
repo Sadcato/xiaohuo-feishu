@@ -34,8 +34,11 @@ async def root():
 
 @app.post(BOT_EVENT_CALLBACK_PATH)
 async def bot_event(request: Request, authenticated: bool = Depends(verify_feishu_request)):
+    # 处理认证失败的情况
     if not authenticated:
-        pass
+        raise HTTPException(status_code=401, detail="未授权的请求")
+        
+    # 解析事件数据
     event_data = await request.json()
     return await handle_bot_event(event_data)
 
